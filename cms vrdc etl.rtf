@@ -1,0 +1,214 @@
+{\rtf1\ansi\ansicpg1252\deff0\deflang1033\deflangfe1033{\fonttbl{\f0\fnil Courier New;}{\f1\fnil\fcharset0 Calibri;}}
+{\colortbl ;\red0\green128\blue0;\red0\green0\blue255;\red0\green0\blue0;\red0\green0\blue128;\red0\green128\blue128;\red128\green0\blue128;}
+{\*\generator Msftedit 5.41.21.2510;}\viewkind4\uc1\pard\cf1\lang9\f0\fs18 /* CMS VRDC ETL to OHDSI CDM v5\par
+ * -----------------------------\par
+ * Fabricio Kury, MD, Vojtech Huser, MD, PhD\par
+ * Lister Hill National Center For Biomedical Communications,\par
+ * U.S. National Library of Medicine\par
+ * September 14, 2015\par
+ *\par
+ * This program is intended to produce Observational Health Data Sciences and\par
+ * Informatics (OHDSI) Common Data Model v5 tables from the data available\par
+ * inside the Virtual Research Data Center of the U.S. Centers For Medicare &\par
+ * Medicaid Services (CMS).\par
+ *\par
+ * Contact:\par
+ * fabricio.kury@nih.gov\par
+ * {\field{\*\fldinst{HYPERLINK "http://github.com/fabkury"}}{\fldrslt{\ul\cf2 http://github.com/fabkury}}}\f0\fs18\par
+ */\cf3\par
+\par
+\cf1 /** BEGIN CONSTANTS **/\cf3\par
+\cf2 %let\cf3  year_list = 1999 2000 2001 2002 2003 2004 2005 2006 2007 2008 2009 2010\par
+\tab 2011 2012; \cf1 /* year_list specifies the years of data to be considered for\par
+ all data except Part D data. It should be tailored to your DUA and/or your\par
+ intentions. */\cf3\par
+\par
+\cf2 %let\cf3  drug_year_list = 6 7 8 9 10 11 12; \cf1 /* drug_year_list specifies the years\par
+ of data to be considered for Part D data. It should be tailored to your DUA\par
+ and/or your intentions. */\cf3\par
+ \par
+\cf2 %let\cf3  maps_library = FKU838SL.; \cf1 /* maps_library must point to the SAS library\par
+ containing the vc5_* tables with the mappings from VRDC codes to OHDSI CDM v5\par
+ codes. */\cf3\par
+\par
+\cf2 %let\cf3  pde_library = IN026250.; \cf1 /* pde_library must point to the SAS library\par
+ containing the Part D Event (PDE) files. */\cf3\par
+\par
+\cf2 %let\cf3  pde_request_suffix = _R3632; \cf1 /* pde_request_suffix constains the suffix\par
+ that is added to the PDE file names according to the number of the request\par
+ that originated the files. */\cf3\par
+\par
+\cf2 %let\cf3  part_d_enrollment_code = 44814722; \cf1 /* Code used as concept_id for\par
+ observation periods derived from Part D enrollment. */\cf3\par
+\par
+\cf2 %let\cf3  part_d_coverage_regex = "/H|R|S|E|(X[A-Za-z0-9]\{4\})/"; \cf1 /* This PERL\par
+ regular expression identifies all codes that signify that the beneficiary\par
+ had Part D enrollment in a specific month; as specified in the ResDAC website.\par
+\par
+/** END CONSTANTS **/\cf3\par
+\par
+\cf1 /** BEGIN ETL CODE **/\cf3\par
+\par
+\cf1 /* PERSON table */\cf3\par
+\cf4\b %macro\cf3\b0  \b\i etl_person\b0\i0 ;\par
+proc sql;\par
+create view PERSON as\par
+\cf1 /* The %do ... %to ... loop structure is used to replicate the SQL code for all\par
+ years. */\cf3\par
+\cf2 %do\cf3  YL=\cf5\b 1\cf3\b0  \cf2 %to\cf3  \cf2 %sysfunc\cf3 (countw(&year_list));\par
+\tab\cf2 %if\cf3  &YL > \cf5\b 1\cf3\b0  \cf2 %then\cf3  union;\par
+\tab select BENE_ID as person_id, \cf1 /* Notice that we are using the BENE_ID\par
+ both as person_id and person_source_value, the only difference being the\par
+ data type (number and text, respectively). */\cf3\par
+\tab\tab gender_concept_id, \cf1 /* Comes from vc5_gender_map.csv */\cf3\par
+\tab\tab year(BENE_BIRTH_DT) as year_of_birth,\par
+\tab\tab month(BENE_BIRTH_DT) as month_of_birth,\par
+\tab\tab day(BENE_BIRTH_DT) as day_of_birth,\par
+\tab\tab race_concept_id, \cf1 /* Comes from vc5_race_map.csv */\cf3\par
+\tab\tab ethnicity_concept_id, \cf1 /* Comes from vc5_ethnicity_map.csv */\cf3\par
+\tab\tab put(BENE_ID, \cf5 zn.\cf3 ) as person_source_value,\par
+\tab\tab a.BENE_SEX_IDENT_CD as gender_source_value,\par
+\tab\tab a.BENE_RACE_CD as race_source_value\par
+\tab from BENE_CC.MBSF_AB_\cf2 %scan\cf3 (&year_list, &YL) a,\par
+\tab\tab &maps_library.vc5_gender_map b,\par
+\tab\tab &maps_library.vc5_race_map c,\par
+\tab\tab &maps_library.vc5_ethnicity_map d\par
+\tab where b.BENE_SEX_IDENT_CD = a.BENE_SEX_IDENT_CD\par
+\tab\tab and c.BENE_RACE_CD = a.BENE_RACE_CD\par
+\tab\tab and d.BENE_RACE_CD = a.BENE_RACE_CD\par
+\cf2 %end\cf3 ;; \cf1 /* This double ; is intentional and necessary. */\cf3  \par
+quit;\par
+\cf4\b %mend\cf3\b0 ;\par
+\par
+\cf1 /* DRUG_EXPOSURE table */\cf3\par
+\cf4\b %macro\cf3\b0  \b\i etl_drug_exposure\b0\i0 ;\par
+proc sql;\par
+create view DRUG_EXPOSURE as\par
+\cf1 /* The %do ... %to ... loop structure is used to replicate the SQL code for all\par
+ years. */\cf3\par
+\cf2 %do\cf3  YL=\cf5\b 1\cf3\b0  \cf2 %to\cf3  \cf2 %sysfunc\cf3 (countw(&drug_year_list));\par
+\tab\cf2 %if\cf3  &YL > \cf5\b 1\cf3\b0  \cf2 %then\cf3  union;\par
+\tab\cf2 %let\cf3  y = \cf2 %scan\cf3 (&drug_year_list, &YL);\par
+\tab select PDE_ID as drug_exposure_id, \cf1 /* The PDE_ID is a number that uniquely\par
+ identifies the rows in the PDE files. */\cf3\par
+\tab\tab BENE_ID as person_id,\par
+\tab\tab\cf5\b 0\cf3\b0  as drug_concept_id,\par
+\tab\tab SRVC_DT as drug_exposure_start_date,\par
+\tab\tab\cf5\b 0\cf3\b0  as drug_type_concept_id,\par
+\tab\tab FILL_NUM as refills, \cf1 /* TO DO: Verify if this interpretation of\par
+ FILL_NUM is correct. */\cf3\par
+\tab\tab DAYS_SUPLY_NUM as days_supply,\par
+\tab\tab PROD_SRVC_ID as drug_source_value,\par
+\tab\tab\cf5\b 0\cf3\b0  as route_source_value,\par
+\tab\tab STR as dose_unit_source_value\par
+\tab\cf1 /* In 2012 they changed the file naming convention from starting with\par
+ "PDESAF" to starting with "PDE" */\cf3\par
+\tab from \cf2 %if\cf3  &y > \cf5\b 11\cf3\b0  \cf2 %then\cf3  &pde_library.PDE&\cf5 y.\cf3 &pde_request_suffix;\par
+\tab\tab\cf2 %else\cf3  &pde_library.PDESAF\cf2 %sysfunc\cf3 (putn(&y, \cf5 Z2.\cf3 ))&pde_request_suffix;\par
+\cf2 %end\cf3 ;; \cf1 /* This double ; is intentional and necessary. */\cf3  \par
+quit;\par
+\cf4\b %mend\cf3\b0 ;\par
+\par
+\cf1 /* DEATH table */\cf3\par
+\cf4\b %macro\cf3\b0  \b\i etl_death\b0\i0 ;\par
+proc sql;\par
+create view DEATH as\par
+\cf1 /* The %do ... %to ... loop structure is used to replicate the SQL code for all\par
+ years. */\cf3\par
+\cf2 %do\cf3  YL=\cf5\b 1\cf3\b0  \cf2 %to\cf3  \cf2 %sysfunc\cf3 (countw(&year_list));\par
+\tab\cf2 %if\cf3  &YL > \cf5\b 1\cf3\b0  \cf2 %then\cf3  union;\par
+\tab select BENE_ID as person_id,\par
+\tab\tab BENE_DEATH_DT as death_date,\par
+\tab\tab\cf5\b 0\cf3\b0  as death_type_concept_id\par
+\tab from BENE_CC.MBSF_AB_\cf2 %scan\cf3 (&year_list, &YL)\par
+\tab where BENE_DEATH_DT is not null\par
+\cf2 %end\cf3 ;; \cf1 /* This double ; is intentional and necessary. */\cf3  \par
+quit;\par
+\cf4\b %mend\cf3\b0 ;\par
+\par
+\cf1 /* OBSERVATION_PERIOD table */\cf3\par
+\cf4\b %macro\cf3\b0  \b\i etl_observation_period\b0\i0 ;\par
+\cf1 /* PLEASE NOTICE that this code currently only considers periods of Part D \par
+ enrollment as observation periods; although the similar code could be used\par
+ for Parts A and B. */\cf3\par
+\par
+proc sql;\par
+create view OBSERVATION_PERIOD as\par
+\cf1 /* The %do ... %to ... loop structure is used to replicate the SQL code for all\par
+ years. */\cf3\par
+\cf2 %do\cf3  YL=\cf5\b 1\cf3\b0  \cf2 %to\cf3  \cf2 %sysfunc\cf3 (countw(&drug_year_list));\par
+\tab\cf2 %let\cf3  y = \cf2 %eval\cf3 (\cf2 %scan\cf3 (&drug_year_list, &YL)+2000);\par
+\tab\cf2 %if\cf3  &YL > \cf5\b 1\cf3\b0  \cf2 %then\cf3  union;\par
+\tab\cf1 /* This additional %do ... %to ... loop structure replicates the SQL code\par
+for each month of the year (each has a separate column in the VRDC) */\cf3\par
+\tab\cf2 %do\cf3  MO=\cf5\b 1\cf3\b0  \cf2 %to\cf3  \cf5\b 12\cf3\b0 ;\par
+\tab\tab\cf2 %if\cf3  &MO > \cf5\b 1\cf3\b0  \cf2 %then\cf3  union;\par
+\tab\tab select \cf5\b 0\cf3\b0  as observation_period_id,\par
+\tab\tab\tab BENE_ID as person_id,\par
+\tab\tab\tab mdy(&MO, \cf5\b 1\cf3\b0 , &y) as observation_period_start_date,\par
+\tab\tab\tab intnx(\cf6 'day'\cf3 , intnx(\cf6 'month'\cf3 , mdy(&MO, \cf5\b 1\cf3\b0 , &y), \cf5\b 1\cf3\b0 ), -\cf5\b 1\cf3\b0 )\par
+\tab\tab\tab\tab as observation_period_end_date,\par
+\tab\tab\tab &part_d_enrollment_code as period_type_concept_id\par
+\tab\tab from BENE_CC.MBSF_D_&y\par
+\tab\tab where prxmatch(&part_d_coverage_regex,\par
+\tab\tab\tab PTD_CNTRCT_ID_\cf2 %sysfunc\cf3 (putn(&MO, \cf5 Z2.\cf3 ))) > \cf5\b 0\cf3\b0\par
+\tab\cf2 %end\cf3 ;\par
+\cf2 %end\cf3 ;;\par
+quit;\par
+\cf4\b %mend\cf3\b0 ;\par
+\par
+\cf4\b %macro\cf3\b0  \b\i drop_all_etl_views\b0\i0 ;\par
+proc sql;\par
+drop view PERSON;\par
+drop view DRUG_EXPOSURE;\par
+drop view DEATH;\par
+drop view OBSERVATION_PERIOD;\par
+quit;\par
+\cf4\b %mend\cf3\b0 ;\par
+\par
+\cf1 /** END ETL CODE **/\cf3\par
+\par
+\cf1 /* Now, execute the ETL, i.e., create the SQL views. */\cf3\par
+%\b\i etl_person\b0\i0 ;\par
+%\b\i etl_drug_exposure\b0\i0 ;\par
+%\b\i etl_death\b0\i0 ;\par
+%\b\i etl_observation_period\b0\i0 ;\par
+\par
+\cf1 /** END ETL CODE **/\cf3\par
+\par
+\cf1 /* Uncomment the section below to test the ETL. */\cf3\par
+\cf1 /*\par
+proc sql;\par
+create table drug_exposure_mat as\par
+select * from DRUG_EXPOSURE\par
+where person_id < 50000;\par
+quit;\par
+\par
+proc sql;\par
+create table person_mat as\par
+select * from PERSON\par
+where person_id < 50000;\par
+quit;\par
+\par
+proc sql;\par
+create table death_mat as\par
+select * from DEATH\par
+where person_id < 50000;\par
+quit;\par
+\par
+proc sql;\par
+create table observation_period_mat as\par
+select * from OBSERVATION_PERIOD\par
+where person_id < 50000;\par
+quit;\par
+*/\cf3\par
+\par
+\cf1 /* As a "safety" measure, we delete the ETL views after using them. Views\par
+ are created/deleted virtually instantly, and the reason to delete them is to\par
+ avoid the risk of accidentaly clicking, inside SAS, in any tab or button that\par
+ shows you the content of the view. Such click would make SAS initiate ETL of\par
+ the entire data files, a long operation that freezes the program. */\cf3\par
+%\b\i drop_all_etl_views\b0\i0 ;\par
+\pard\sa200\sl276\slmult1\cf0\f1\fs12\par
+}
+ 
