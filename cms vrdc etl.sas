@@ -41,7 +41,11 @@
 
 %let part_d_coverage_regex = "/H|R|S|E|(X[A-Za-z0-9]{4})/"; /* This PERL
  regular expression identifies all codes that signify that the beneficiary
- had Part D enrollment in a specific month; as specified in the ResDAC website.
+ had Part D enrollment in a specific month; as specified in the ResDAC website:
+ http://www.resdac.org/cms-data/variables/Plan-Coverage-Months-Number 
+ and
+ https://www.ccwdata.org/cs/groups/public/documents/datadictionary/cntrct01.txt
+ */
 
 /** END CONSTANTS **/
 
