@@ -43,7 +43,11 @@
 \par
 \cf2 %let\cf3  part_d_coverage_regex = "/H|R|S|E|(X[A-Za-z0-9]\{4\})/"; \cf1 /* This PERL\par
  regular expression identifies all codes that signify that the beneficiary\par
- had Part D enrollment in a specific month; as specified in the ResDAC website.\par
+ had Part D enrollment in a specific month; as specified in the ResDAC website:\par
+ http://www.resdac.org/cms-data/variables/Plan-Coverage-Months-Number\par
+ and\par
+ https://www.ccwdata.org/cs/groups/public/documents/datadictionary/cntrct01.txt\par
+ */\par
 \par
 /** END CONSTANTS **/\cf3\par
 \par
@@ -211,4 +215,3 @@ quit;\par
 %\b\i drop_all_etl_views\b0\i0 ;\par
 \pard\sa200\sl276\slmult1\cf0\f1\fs12\par
 }
- 
