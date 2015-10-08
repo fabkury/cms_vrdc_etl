@@ -5,8 +5,6 @@
 
 This repository contains the source code, as well as small code mapping tables (the vc5_* files), that accompany the poster submission to the OHDSI 2015 Annual Symposium.
 
-For convenience, the code is present here in two formats: RTF (contains syntax highlighting) and SAS (plain text).
-
 Please do not hesitate to contact us about this work! :)
 
 -- Fabrício
